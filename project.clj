@@ -11,7 +11,7 @@
                  [org.clojure/clojure "1.7.0"]
                  [org.clojure/tools.nrepl "0.2.12"]
                  [org.clojure/data.csv "0.1.3"]
-                 [incanter "1.9.0"]
+                 [incanter "1.5.7"]
                  [clj-http "2.0.0"]
                  [cheshire "5.5.0"]
                  [clj-http-lite "0.3.0"]
