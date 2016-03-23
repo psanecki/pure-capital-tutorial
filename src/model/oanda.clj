@@ -207,7 +207,10 @@
                            (recur (pop! candles0) (conj! acc with-norm-vol))))))]
     normalized))
 
-
+(defn ->mid-candle
+  [candles]
+  (for [candle candles]
+    (select-keys candle [:openMid :highMid :lowMid :closeMid])))
 
 
 
@@ -227,45 +230,6 @@
         candle0 (reduce #(update %1 %2 utils/->0-1 (:min stat) (:max stat))
                         candle0 (keys candle0))]
     (merge candle candle0)))
-
-
-(defn history-loop
-  [ & [maskfn instr granularity]]
-  (let [maskfn (or maskfn prn)
-        instr (or instr :eur-usd)
-        granularity (or granularity GRANULARITY)]
-
-    (future
-      (loop [old-candle nil]
-        (if (not (nil? old-candle))
-          (do
-            (let [new-candle (first (retrieve-history instr granularity 1))
-                  ;;_ (prn "new candle: " (str new-candle))
-                  ]
-              (if (compare-dates old-candle new-candle)
-                (do
-                  (Thread/sleep 1000)
-                  (recur new-candle))
-                (do ; else
-                  ;; execute function on candle
-                  (maskfn new-candle)
-
-                  (Thread/sleep 2500)
-                  (recur new-candle)))))
-          (do
-            (Thread/sleep 1000)
-            (recur (first (retrieve-history instr granularity 1)))); else
-          )))))
-
-
-(defn prices-loop
-  [& {:keys [instr interval maskfn]
-                      :or {instr :eur-usd, interval 1000
-                           maskfn prn}}]
-  (future (while true
-            (let [prices (-> (get-current-prices instr))]
-              (maskfn prices))
-            (Thread/sleep interval))))
 
 
 
