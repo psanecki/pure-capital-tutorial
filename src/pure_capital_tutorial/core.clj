@@ -1,11 +1,21 @@
 (ns pure-capital-tutorial.core
-  (:require [clj-http.client :as client]
-            [clojure.instant :as instant]
-            [util.date :refer :all])
+  (:require
+   [clj-http.client :as client]
+   [clojure.repl :as r]
+   [clojure.pprint :as p]
+   [clojure.instant :as instant]
+   [incanter
+    [stats :as s]
+    [charts :as ch]
+    [core :as i]]
+   [oanda.core :as o]
+   [model.indicators :as ind]
+   [util.date :refer :all]
+   [util.scheduler :as sch]
+ ;; :reload-all
+  )
   )
 
-
-(require '[clojure.pprint :as p])
 
 (defonce auth {})
 ;;(def oanda "https://api-fxpractice.oanda.com/v1/")
@@ -38,15 +48,12 @@
                                        {:headers auth :as :json}))))
 
 ;; character of financial data
-(require '[oanda.core :as o])
-(require '[incanter [stats :as s]
-           [charts :as ch]
-           [core :as i]])
-(require '[clojure.repl :as r])
+
 
 
 (def h1 (o/retrieve-history :gbp-usd :m1 5000))
 (p/pprint (keys (first h1)))
+(def u-h1 (o/move-window h1))
 
 (->> (take 50 h1)
     (p/print-table
@@ -104,97 +111,73 @@
 ;; (.setChart (.getChartPanel v ) (ch/histogram (repeatedly 10 #(rand-int 100))))
 ;; (p/pprint (bean v))
 ;; (.getDataset (.getXYPlot hist-ch))
-;; (def scheduler (java.util.concurrent.Executors/newScheduledThreadPool 1))
-;; (.scheduleAtFixedRate scheduler
-;;                       (fn [] (println "hell"))
-;;                       1 1
-;;                       java.util.concurrent.TimeUnit/SECONDS
-;;                       )
-;; (.shutdown scheduler)
-
-;;;;;;;;;;;;;;;;;;;;;;;;;; Moving histogram
+;; ;;;;;;;;;;;;;;;;;;;;;;;;;; Moving histogram
 ;; narrow information to midpoints
-(defn ->mid-candles
-  "[Candle] -> [Candle]"
-  [candles]
-  (for [candle candles]
-    (select-keys
-     candle
-    [:time :openMid :highMid :lowMid :closeMid :volume])))
 
-(def candles (->mid-candles h1))
-(def candles-stat (o/candles->stat candles))
-;; 2 options - 1.center around 0 or map [0..1]
-(def candles-norm
-  (for [candle candles]
-    (o/normalize-0-1-candle candle candles-stat)))
+(def h1 (o/retrieve-history :eur-usd :m1 5000))
+(count h1)
+(do
 
-(i/view (ch/line-chart (range 0 5000) (map :volume candles-norm)))
-(p/pprint (first candles-norm))
-;; it seems like a lot of processing but is very fast
-;; last thing:
-;; truncate precision
+  (def candles (o/->mid-candles h1))
+  (def candles-stat (o/candles->stat candles))
+  ;; 2 options - 1.center around 0 or map [0..1]
+  (def candles-norm
+    (for [candle candles]
+      (o/normalize-0-1-candle candle candles-stat)))
 
-;;(def h (first (map :highMid candles-norm)))
-;;(prn (-> h (* 1e6) Math/floor (* 1e-6)))
-;;(prn (float h))
+  (i/view (ch/line-chart (range 0 5000) (map :volume candles-norm)))
+  (p/pprint (first candles-norm))
+  ;; it seems like a lot of processing but is very fast
+  ;; last thing:
+  ;; truncate precision
 
-(def highs (for [high (map :highMid candles-norm)]
-             (-> high (* 1e6) Math/floor (* 1e-6) float)))
+  ;;(def h (first (map :highMid candles-norm)))
+  ;;(prn (-> h (* 1e6) Math/floor (* 1e-6)))
+  ;;(prn (float h))
 
-(print (first highs))
-(i/view (ch/line-chart (range 5000) highs))
+  (def highs (for [high (map :highMid candles-norm)]
+               (-> high (* 1e6) Math/floor (* 1e-6) float)))
 
-(apply min highs)
+  (print (first highs))
+  (i/view (ch/line-chart (range 5000) highs)))
 
-(def r1 (range 0 1 1e-6))
-(count r1)
+
 
 
 ;; histogram
 ;; I didn't know that clojure has function for histogram
-(defn histogram
-  "[Double] -> Int -> [Int]"
-  [xs res]
-  (let [
-        bins (range (apply min xs) (+ 1e-6 (apply max xs)) 1e-6)
-        hist (zipmap bins (repeat (count bins) 0))
-        freq (frequencies xs)
-        hist (persistent!
-              (reduce
-                (fn [res [k v]] (assoc! res k v))
-                (transient hist)
-                freq))
+
+(require '[clj-fudi.core :as fudi])
+(require '[model.indicators :as ind] :reload-all)
+
+(p/pprint (o/get-instrument-list))
+
+(defn histogram->pd [])
+(defn histogram->pd
+  []
+  (let [history (o/retrieve-history :chf-jpy :m1 5000)
+        candles (o/->mid-candles history)
+        stat (o/candles->stat candles)
+        ;; choice: to normalise or not
+        candles-norm (o/normalize-0-1-candles candles stat)
+        highs (map :highMid candles-norm)
+        histogram (ind/histogram highs :nbins 512)
         ]
-    (map #(apply + %)
-         (->> hist sort vals (partition-all (/ (count hist) res))))))
+    (fudi/send-udp {:reset true :histogram (vals  histogram)} :localhost 3001)
+    histogram ))
 
-(defn find-first [x xs]
-  (apply min (filter #(<= x %) xs)))
-(find-first 4.1 (range 10))
+(def hist (histogram->pd))
+(count hist)
 
+(i/view (ch/bar-chart (keys hist) (vals hist)))
 
+(defonce a (sch/every-nmsec #'histogram->pd 1000))
+;;(print  (ind/histogram highs 128))
+(sch/shutdown a)
 
-(defn histogram
-  [xs res]
-  (let [step (float (/ 1 res))
-        bins (range 0 (+ step 1) step)
-        hist (zipmap bins (repeat (count bins) 0))
-        freq (frequencies xs)
-        hist (reduce (fn [acc [k v]]
-                       (let [nk (apply min (filter #(<= k %) bins))
-                             ov (get acc nk 0)]
-                         (assoc acc nk
-                                (+ ov v))))
-                     {} freq)
-       ]
-    (vec (vals (sort hist)))
-))
-
-(print  (histogram highs 128))
 
 (do
-  (time (def highs-histogram (histogram highs 512)))
+  (def highs-histogram (ind/histogram (take 5000  highs) 256))
     (count highs-histogram)
     (i/view (ch/histogram highs :nbins 256))
     (i/view (ch/bar-chart (range (count highs-histogram)) highs-histogram)))
@@ -211,3 +194,4 @@
                               :close :closeMid
                               :volume :volume
                               :date :time))
+(o/get-current-prices :eur-usd)

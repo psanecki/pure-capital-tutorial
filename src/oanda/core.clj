@@ -12,6 +12,15 @@
   (:import java.util.Date)
   )
 
+(defn ->mid-candles
+  "[Candle] -> [Candle]"
+  [candles]
+  (for [candle candles]
+    (select-keys
+     candle
+    [:time :openMid :highMid :lowMid :closeMid :volume])))
+
+
 (def GRANULARITY :m1)
 
 (defn auth
@@ -222,6 +231,10 @@
                         candle0 (keys candle0))]
     (merge candle candle0)))
 
+(defn normalize-0-1-candles
+  [candles stat]
+  (for [candle candles]
+    (normalize-0-1-candle candle stat)))
 
 (defn history-loop
   [ & [maskfn instr granularity]]

@@ -3,6 +3,23 @@
   )
 
 
+(defn histogram
+  [xs & {:keys [nbins] :or {nbins 256}}]
+  (let [step (float (/ 1 nbins))
+        bins (range step (+ step 1) step)
+        hist (zipmap bins (repeat (count bins) 0))
+        freq (frequencies xs)
+        hist (reduce (fn [acc [k v]]
+                       (let [nk (apply min (filter #(<= k %) bins))
+                             ov (get acc nk 0)]
+                         (assoc acc nk
+                                (+ ov v))))
+                     hist freq)
+       ]
+    (sort hist)
+))
+
+
 
 (defn with-ichimoku
   "[Candle] -> [Candle]"
