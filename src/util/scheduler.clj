@@ -1,7 +1,7 @@
 (ns util.scheduler)
 
 (defn every-nmsec
-  [f millis]
+  [millis f]
   (let [scheduler (java.util.concurrent.Executors/newScheduledThreadPool 1)]
     (.scheduleAtFixedRate
      scheduler f

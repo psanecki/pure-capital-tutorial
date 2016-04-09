@@ -171,7 +171,7 @@
 
 (i/view (ch/bar-chart (keys hist) (vals hist)))
 
-(defonce a (sch/every-nmsec #'histogram->pd 1000))
+(defonce a (sch/every-nmsec 1000 #'histogram->pd ))
 ;;(print  (ind/histogram highs 128))
 (sch/shutdown a)
 

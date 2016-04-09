@@ -1,0 +1,528 @@
+;; gorilla-repl.fileformat = 1
+
+;; **
+;;; # Pure Capital Workshop
+;;; 
+;;; ## London 2016
+;;; 
+;;; ### Agenda
+;;; 
+;;; 1. Introduction and motivation (10min)
+;;; 2. Getting data (30min):
+;;;   * building REST queries
+;;;   * parsing responds
+;;; 3. Basic analysis of financial data (15min):
+;;;   * plotting with Incanter and gorilla-repl
+;;;   * normalization and mapping
+;;;   * simplifying data retrieval by using `oanda.core`
+;;; 4. Connecting to *Pure Data*
+;;;   * patching simple UDP client using built-in `[netreceive]` object
+;;;   * storing data in *Pure Data* `[table]`s
+;;; 5. Crash course of *Pure Data* data structures
+;;; 
+;; **
+
+;; **
+;;; ## 2. Getting data
+;;; 
+;;; **Disclaimer**: I have no connections to any corporation. We will mimic API of Oanda Corp. only to illustrate general principals of REST based data retrival.
+;;; 
+;;; Having said that, we are going to build our queries based on [this](http://developer.oanda.com/rest-live/introduction/) specification.
+;; **
+
+;; @@
+(ns pure-capital)
+;; @@
+;; =>
+;;; {"type":"html","content":"<span class='clj-nil'>nil</span>","value":"nil"}
+;; <=
+
+;; @@
+(require '[clj-http.client :as client] 
+         '[clojure.pprint :refer :all]
+         '[clojure.repl :refer :all]
+         '[clojure.java.shell :refer :all])
+;; @@
+;; =>
+;;; {"type":"html","content":"<span class='clj-nil'>nil</span>","value":"nil"}
+;; <=
+
+;; **
+;;; ### Getting prices
+;;; 
+;;; [REST](https://en.wikipedia.org/wiki/Representational_state_transfer) is _de facto_ standard of APIs, see [Programmableweb](http://www.programmableweb.com)
+;;; 
+;;;     curl -X GET "https://api-fxtrade.oanda.com/v1/prices?instruments=EUR_USD%2CUSD_JPY%2CEUR_CAD"
+;;; 
+;;; Response is a [JSON](https://en.wikipedia.org/wiki/JSON) document.
+;; **
+
+;; @@
+(def addr  "http://localhost:8080/v1/")
+(def query "prices?instruments=EUR_USD%2CUSD_JPY%2CEUR_CAD")
+;; @@
+;; =>
+;;; {"type":"html","content":"<span class='clj-var'>#&#x27;pure-capital/query</span>","value":"#'pure-capital/query"}
+;; <=
+
+;; @@
+(def res (client/get (str addr query)
+               {:headers {} :as :json}))
+;; @@
+;; =>
+;;; {"type":"html","content":"<span class='clj-var'>#&#x27;pure-capital/res</span>","value":"#'pure-capital/res"}
+;; <=
+
+;; @@
+(pprint res)
+;; @@
+;; ->
+;;; {:status 200,
+;;;  :headers
+;;;  {&quot;Server&quot; &quot;Apache-Coyote/1.1&quot;,
+;;;   &quot;Content-Type&quot; &quot;application/json;charset=UTF-8&quot;,
+;;;   &quot;Transfer-Encoding&quot; &quot;chunked&quot;,
+;;;   &quot;Date&quot; &quot;Fri, 08 Apr 2016 12:35:01 GMT&quot;,
+;;;   &quot;Connection&quot; &quot;close&quot;},
+;;;  :body
+;;;  {:prices
+;;;   [{:instrument &quot;EUR_USD&quot;,
+;;;     :time &quot;2015-12-10T00:01:00.000000Z&quot;,
+;;;     :bid 1.10158,
+;;;     :ask 1.10191}
+;;;    {:instrument &quot;USD_JPY&quot;,
+;;;     :time &quot;2015-12-10T00:01:00.000000Z&quot;,
+;;;     :bid 121.576,
+;;;     :ask 121.635}
+;;;    {:instrument &quot;EUR_CAD&quot;,
+;;;     :time &quot;2015-12-10T00:01:00.000000Z&quot;,
+;;;     :bid 1.49434,
+;;;     :ask 1.49492}]},
+;;;  :request-time 1521,
+;;;  :trace-redirects
+;;;  [&quot;http://localhost:8080/v1/prices?instruments=EUR_USD%2CUSD_JPY%2CEUR_CAD&quot;],
+;;;  :orig-content-encoding nil}
+;;; 
+;; <-
+;; =>
+;;; {"type":"html","content":"<span class='clj-nil'>nil</span>","value":"nil"}
+;; <=
+
+;; @@
+(do 
+  (def prices (for [res0 (-> res :body :prices)]
+  			(select-keys res0 [:time :bid :ask :instrument])))
+  (pprint prices))
+;; @@
+;; ->
+;;; ({:time &quot;2015-12-10T00:01:00.000000Z&quot;,
+;;;   :bid 1.10158,
+;;;   :ask 1.10191,
+;;;   :instrument &quot;EUR_USD&quot;}
+;;;  {:time &quot;2015-12-10T00:01:00.000000Z&quot;,
+;;;   :bid 121.576,
+;;;   :ask 121.635,
+;;;   :instrument &quot;USD_JPY&quot;}
+;;;  {:time &quot;2015-12-10T00:01:00.000000Z&quot;,
+;;;   :bid 1.49434,
+;;;   :ask 1.49492,
+;;;   :instrument &quot;EUR_CAD&quot;})
+;;; 
+;; <-
+;; =>
+;;; {"type":"html","content":"<span class='clj-nil'>nil</span>","value":"nil"}
+;; <=
+
+;; @@
+(->>  
+    (client/get (str addr "instruments") 
+                {:headers {} :as :json})
+    :body :instruments (take 5) pprint)
+;; @@
+;; ->
+;;; ({:instrument &quot;AU200_AUD&quot;,
+;;;   :displayName &quot;Australia 200&quot;,
+;;;   :pip 1.0,
+;;;   :maxTradeUnits 200}
+;;;  {:instrument &quot;AUD_CAD&quot;,
+;;;   :displayName &quot;AUD/CAD&quot;,
+;;;   :pip 1.0E-4,
+;;;   :maxTradeUnits 10000000}
+;;;  {:instrument &quot;AUD_CHF&quot;,
+;;;   :displayName &quot;AUD/CHF&quot;,
+;;;   :pip 1.0E-4,
+;;;   :maxTradeUnits 10000000}
+;;;  {:instrument &quot;AUD_HKD&quot;,
+;;;   :displayName &quot;AUD/HKD&quot;,
+;;;   :pip 1.0E-4,
+;;;   :maxTradeUnits 10000000}
+;;;  {:instrument &quot;AUD_JPY&quot;,
+;;;   :displayName &quot;AUD/JPY&quot;,
+;;;   :pip 0.01,
+;;;   :maxTradeUnits 10000000})
+;;; 
+;; <-
+;; =>
+;;; {"type":"html","content":"<span class='clj-nil'>nil</span>","value":"nil"}
+;; <=
+
+;; @@
+(def query-history "/candles?count=5000&instrument=EUR_USD&granularity=M1")
+;; @@
+;; =>
+;;; {"type":"html","content":"<span class='clj-var'>#&#x27;pure-capital/query-history</span>","value":"#'pure-capital/query-history"}
+;; <=
+
+;; @@
+(def candles-raw (-> (str addr query-history)
+                     (client/get {:as :json})
+                     :body :candles))
+;; @@
+;; =>
+;;; {"type":"html","content":"<span class='clj-var'>#&#x27;pure-capital/candles-raw</span>","value":"#'pure-capital/candles-raw"}
+;; <=
+
+;; @@
+(pprint (first candles-raw))
+;; @@
+;; ->
+;;; {:highBid 1.09266,
+;;;  :name nil,
+;;;  :time &quot;2015-12-15T16:28:00.000000Z&quot;,
+;;;  :lowBid 1.09215,
+;;;  :openAsk 1.09242,
+;;;  :closeAsk 1.09281,
+;;;  :openBid 1.09228,
+;;;  :volume 35,
+;;;  :granularity nil,
+;;;  :highAsk 1.09282,
+;;;  :lowMid 1.092225,
+;;;  :openMid 1.09235,
+;;;  :closeMid 1.092735,
+;;;  :closeBid 1.09266,
+;;;  :lowAsk 1.0923,
+;;;  :highMid 1.092735}
+;;; 
+;; <-
+;; =>
+;;; {"type":"html","content":"<span class='clj-nil'>nil</span>","value":"nil"}
+;; <=
+
+;; @@
+(def candles (map #(select-keys % [:time :openMid :highMid :lowMid :closeMid :volume]) candles-raw))
+(pprint (take 5 candles))
+;; @@
+;; ->
+;;; ({:time &quot;2015-12-15T16:28:00.000000Z&quot;,
+;;;   :openMid 1.09235,
+;;;   :highMid 1.092735,
+;;;   :lowMid 1.092225,
+;;;   :closeMid 1.092735,
+;;;   :volume 35}
+;;;  {:time &quot;2015-12-15T16:27:00.000000Z&quot;,
+;;;   :openMid 1.09241,
+;;;   :highMid 1.09241,
+;;;   :lowMid 1.09219,
+;;;   :closeMid 1.09232,
+;;;   :volume 49}
+;;;  {:time &quot;2015-12-15T16:26:00.000000Z&quot;,
+;;;   :openMid 1.09234,
+;;;   :highMid 1.092585,
+;;;   :lowMid 1.092125,
+;;;   :closeMid 1.092385,
+;;;   :volume 83}
+;;;  {:time &quot;2015-12-15T16:25:00.000000Z&quot;,
+;;;   :openMid 1.0925,
+;;;   :highMid 1.0925,
+;;;   :lowMid 1.09231,
+;;;   :closeMid 1.092315,
+;;;   :volume 41}
+;;;  {:time &quot;2015-12-15T16:24:00.000000Z&quot;,
+;;;   :openMid 1.092665,
+;;;   :highMid 1.0927,
+;;;   :lowMid 1.092495,
+;;;   :closeMid 1.092525,
+;;;   :volume 41})
+;;; 
+;; <-
+;; =>
+;;; {"type":"html","content":"<span class='clj-nil'>nil</span>","value":"nil"}
+;; <=
+
+;; **
+;;; ## 3. Basic analysis
+;; **
+
+;; **
+;;; #### Plotting with `incanter.charts`
+;; **
+
+;; @@
+(require '[incanter 
+           [core :refer [view dataset]]
+           [charts :refer [candle-stick-plot]]])
+
+(def candles-dataset (dataset (vec (keys (first candles))) candles))
+
+(def candles-chart (candle-stick-plot :data candles-dataset
+                         :high :highMid
+                         :low :lowMid
+                         :open :openMid
+                         :close :closeMid
+                         :date :time))
+
+(view candles-chart)
+;; @@
+;; =>
+;;; {"type":"html","content":"<span class='clj-unkown'>#object[org.jfree.chart.ChartFrame 0x4cebc51a &quot;org.jfree.chart.ChartFrame[frame0,0,0,500x400,invalid,layout=java.awt.BorderLayout,title=Incanter Plot,resizable,normal,defaultCloseOperation=DISPOSE_ON_CLOSE,rootPane=javax.swing.JRootPane[,5,25,490x370,layout=javax.swing.JRootPane$RootLayout,alignmentX=0.0,alignmentY=0.0,border=,flags=16777673,maximumSize=,minimumSize=,preferredSize=],rootPaneCheckingEnabled=true]&quot;]</span>","value":"#object[org.jfree.chart.ChartFrame 0x4cebc51a \"org.jfree.chart.ChartFrame[frame0,0,0,500x400,layout=java.awt.BorderLayout,title=Incanter Plot,resizable,normal,defaultCloseOperation=DISPOSE_ON_CLOSE,rootPane=javax.swing.JRootPane[,3,29,494x368,layout=javax.swing.JRootPane$RootLayout,alignmentX=0.0,alignmentY=0.0,border=,flags=16777673,maximumSize=,minimumSize=,preferredSize=],rootPaneCheckingEnabled=true]\"]"}
+;; <=
+
+;; **
+;;; #### Using `oanda.core`
+;; **
+
+;; @@
+(require '[oanda.core :refer :all])
+;; @@
+;; =>
+;;; {"type":"html","content":"<span class='clj-nil'>nil</span>","value":"nil"}
+;; <=
+
+;; @@
+(get-current-prices :eur-usd :gbp-usd)
+;; @@
+;; =>
+;;; {"type":"list-like","open":"<span class='clj-vector'>[</span>","close":"<span class='clj-vector'>]</span>","separator":" ","items":[{"type":"list-like","open":"<span class='clj-map'>{</span>","close":"<span class='clj-map'>}</span>","separator":", ","items":[{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:instrument</span>","value":":instrument"},{"type":"html","content":"<span class='clj-string'>&quot;EUR_USD&quot;</span>","value":"\"EUR_USD\""}],"value":"[:instrument \"EUR_USD\"]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:time</span>","value":":time"},{"type":"html","content":"<span class='clj-string'>&quot;2015-12-16T17:36:02.000110Z&quot;</span>","value":"\"2015-12-16T17:36:02.000110Z\""}],"value":"[:time \"2015-12-16T17:36:02.000110Z\"]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:bid</span>","value":":bid"},{"type":"html","content":"<span class='clj-double'>1.09312</span>","value":"1.09312"}],"value":"[:bid 1.09312]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:ask</span>","value":":ask"},{"type":"html","content":"<span class='clj-double'>1.09333</span>","value":"1.09333"}],"value":"[:ask 1.09333]"}],"value":"{:instrument \"EUR_USD\", :time \"2015-12-16T17:36:02.000110Z\", :bid 1.09312, :ask 1.09333}"},{"type":"list-like","open":"<span class='clj-map'>{</span>","close":"<span class='clj-map'>}</span>","separator":", ","items":[{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:instrument</span>","value":":instrument"},{"type":"html","content":"<span class='clj-string'>&quot;GBP_USD&quot;</span>","value":"\"GBP_USD\""}],"value":"[:instrument \"GBP_USD\"]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:time</span>","value":":time"},{"type":"html","content":"<span class='clj-string'>&quot;2015-12-16T17:36:02.000110Z&quot;</span>","value":"\"2015-12-16T17:36:02.000110Z\""}],"value":"[:time \"2015-12-16T17:36:02.000110Z\"]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:bid</span>","value":":bid"},{"type":"html","content":"<span class='clj-double'>1.50077</span>","value":"1.50077"}],"value":"[:bid 1.50077]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:ask</span>","value":":ask"},{"type":"html","content":"<span class='clj-double'>1.50122</span>","value":"1.50122"}],"value":"[:ask 1.50122]"}],"value":"{:instrument \"GBP_USD\", :time \"2015-12-16T17:36:02.000110Z\", :bid 1.50077, :ask 1.50122}"}],"value":"[{:instrument \"EUR_USD\", :time \"2015-12-16T17:36:02.000110Z\", :bid 1.09312, :ask 1.09333} {:instrument \"GBP_USD\", :time \"2015-12-16T17:36:02.000110Z\", :bid 1.50077, :ask 1.50122}]"}
+;; <=
+
+;; @@
+(def history1 (->mid-candles (retrieve-history :eur-usd :m1 512)))
+;; @@
+;; =>
+;;; {"type":"html","content":"<span class='clj-var'>#&#x27;pure-capital/history1</span>","value":"#'pure-capital/history1"}
+;; <=
+
+;; **
+;;; ##### Basic analysis - statistics
+;; **
+
+;; @@
+(def stat (candles->stat history1))
+(pprint stat)
+;; @@
+;; ->
+;;; {:mean 1.0929056298828137,
+;;;  :variance 6.280510680913931E-7,
+;;;  :sd 7.924967306502868E-4,
+;;;  :max 1.095165,
+;;;  :min 1.091275}
+;;; 
+;; <-
+;; =>
+;;; {"type":"html","content":"<span class='clj-nil'>nil</span>","value":"nil"}
+;; <=
+
+;; **
+;;; ##### Map values into [0-1] range
+;; **
+
+;; @@
+(def history1-norm (normalize-0-1-candles history1 stat))
+(pprint (first history1-norm))
+;; @@
+;; ->
+;;; {:time &quot;2015-12-16T18:19:00.000000Z&quot;,
+;;;  :openMid 0.6041131105398727,
+;;;  :highMid 0.6041131105398727,
+;;;  :lowMid 0.6041131105398727,
+;;;  :closeMid 0.6041131105398727,
+;;;  :volume 1}
+;;; 
+;; <-
+;; =>
+;;; {"type":"html","content":"<span class='clj-nil'>nil</span>","value":"nil"}
+;; <=
+
+;; **
+;;; ##### Plotting with gorilla-repl
+;; **
+
+;; @@
+(require '[gorilla-plot.core :refer :all])
+;; @@
+;; =>
+;;; {"type":"html","content":"<span class='clj-nil'>nil</span>","value":"nil"}
+;; <=
+
+;; @@
+(def history2 (o/retrieve-history :eur-usd :m1 512))
+(list-plot (reverse (map :highMid  history2)) :joined true :plot-size 600 :aspect-ratio 4)
+(list-plot (reverse (map #(* 1e-2 (:volume %)) history2)) :plot-size 600 :joined true :aspect-ratio 6)
+
+;; @@
+;; =>
+;;; {"type":"vega","content":{"width":600,"height":100.0,"padding":{"top":10,"left":55,"bottom":40,"right":10},"data":[{"name":"02e63b14-7615-46c2-955f-cae419b9b3c7","values":[{"x":0,"y":0.32},{"x":1,"y":0.86},{"x":2,"y":0.54},{"x":3,"y":0.37},{"x":4,"y":0.34},{"x":5,"y":0.39},{"x":6,"y":0.29},{"x":7,"y":0.23},{"x":8,"y":0.38},{"x":9,"y":0.36},{"x":10,"y":0.37},{"x":11,"y":0.28},{"x":12,"y":0.6},{"x":13,"y":0.33},{"x":14,"y":0.44},{"x":15,"y":0.59},{"x":16,"y":0.32},{"x":17,"y":0.12},{"x":18,"y":0.3},{"x":19,"y":0.16},{"x":20,"y":0.18},{"x":21,"y":0.15},{"x":22,"y":0.25},{"x":23,"y":0.28},{"x":24,"y":0.39},{"x":25,"y":0.25},{"x":26,"y":0.32},{"x":27,"y":0.42},{"x":28,"y":0.6},{"x":29,"y":0.46},{"x":30,"y":0.5700000000000001},{"x":31,"y":0.5},{"x":32,"y":0.32},{"x":33,"y":0.29},{"x":34,"y":0.19},{"x":35,"y":0.4},{"x":36,"y":0.43},{"x":37,"y":0.32},{"x":38,"y":0.22},{"x":39,"y":0.34},{"x":40,"y":0.13},{"x":41,"y":0.37},{"x":42,"y":0.35000000000000003},{"x":43,"y":0.37},{"x":44,"y":0.33},{"x":45,"y":0.41000000000000003},{"x":46,"y":0.43},{"x":47,"y":0.28},{"x":48,"y":0.18},{"x":49,"y":0.2},{"x":50,"y":0.33},{"x":51,"y":0.31},{"x":52,"y":0.67},{"x":53,"y":0.78},{"x":54,"y":0.85},{"x":55,"y":0.34},{"x":56,"y":0.55},{"x":57,"y":0.85},{"x":58,"y":0.89},{"x":59,"y":0.54},{"x":60,"y":0.35000000000000003},{"x":61,"y":0.77},{"x":62,"y":0.62},{"x":63,"y":0.4},{"x":64,"y":0.5700000000000001},{"x":65,"y":0.48},{"x":66,"y":0.5},{"x":67,"y":0.65},{"x":68,"y":0.72},{"x":69,"y":0.58},{"x":70,"y":0.66},{"x":71,"y":1.03},{"x":72,"y":0.5},{"x":73,"y":0.51},{"x":74,"y":0.49},{"x":75,"y":0.87},{"x":76,"y":0.67},{"x":77,"y":0.7000000000000001},{"x":78,"y":0.44},{"x":79,"y":0.26},{"x":80,"y":0.34},{"x":81,"y":0.07},{"x":82,"y":0.22},{"x":83,"y":0.41000000000000003},{"x":84,"y":0.21},{"x":85,"y":0.11},{"x":86,"y":0.32},{"x":87,"y":0.13},{"x":88,"y":0.17},{"x":89,"y":0.31},{"x":90,"y":0.23},{"x":91,"y":0.16},{"x":92,"y":0.31},{"x":93,"y":0.34},{"x":94,"y":0.16},{"x":95,"y":0.17},{"x":96,"y":0.1},{"x":97,"y":0.14},{"x":98,"y":0.31},{"x":99,"y":0.43},{"x":100,"y":0.25},{"x":101,"y":0.34},{"x":102,"y":0.39},{"x":103,"y":0.25},{"x":104,"y":0.48},{"x":105,"y":0.36},{"x":106,"y":0.39},{"x":107,"y":0.37},{"x":108,"y":0.27},{"x":109,"y":0.46},{"x":110,"y":0.36},{"x":111,"y":0.49},{"x":112,"y":0.29},{"x":113,"y":0.5},{"x":114,"y":0.42},{"x":115,"y":0.46},{"x":116,"y":0.41000000000000003},{"x":117,"y":0.25},{"x":118,"y":0.08},{"x":119,"y":0.25},{"x":120,"y":0.01},{"x":121,"y":0.21},{"x":122,"y":0.19},{"x":123,"y":0.32},{"x":124,"y":0.07},{"x":125,"y":0.31},{"x":126,"y":0.41000000000000003},{"x":127,"y":0.21},{"x":128,"y":0.06},{"x":129,"y":0.16},{"x":130,"y":0.34},{"x":131,"y":0.28},{"x":132,"y":0.3},{"x":133,"y":0.14},{"x":134,"y":0.32},{"x":135,"y":0.22},{"x":136,"y":0.24},{"x":137,"y":0.17},{"x":138,"y":0.25},{"x":139,"y":0.31},{"x":140,"y":0.37},{"x":141,"y":0.28},{"x":142,"y":0.27},{"x":143,"y":0.27},{"x":144,"y":0.27},{"x":145,"y":0.34},{"x":146,"y":0.28},{"x":147,"y":0.52},{"x":148,"y":0.29},{"x":149,"y":0.2},{"x":150,"y":0.25},{"x":151,"y":0.09},{"x":152,"y":0.31},{"x":153,"y":0.16},{"x":154,"y":0.3},{"x":155,"y":0.18},{"x":156,"y":0.16},{"x":157,"y":0.1},{"x":158,"y":0.17},{"x":159,"y":0.31},{"x":160,"y":0.4},{"x":161,"y":0.29},{"x":162,"y":0.31},{"x":163,"y":0.29},{"x":164,"y":0.32},{"x":165,"y":0.28},{"x":166,"y":0.1},{"x":167,"y":0.14},{"x":168,"y":0.25},{"x":169,"y":0.22},{"x":170,"y":0.13},{"x":171,"y":0.22},{"x":172,"y":0.26},{"x":173,"y":0.19},{"x":174,"y":0.11},{"x":175,"y":0.28},{"x":176,"y":0.05},{"x":177,"y":0.23},{"x":178,"y":0.23},{"x":179,"y":0.29},{"x":180,"y":0.29},{"x":181,"y":0.13},{"x":182,"y":0.19},{"x":183,"y":0.19},{"x":184,"y":0.66},{"x":185,"y":0.41000000000000003},{"x":186,"y":0.24},{"x":187,"y":0.17},{"x":188,"y":0.17},{"x":189,"y":0.32},{"x":190,"y":0.2},{"x":191,"y":0.18},{"x":192,"y":0.31},{"x":193,"y":0.19},{"x":194,"y":0.15},{"x":195,"y":0.11},{"x":196,"y":0.15},{"x":197,"y":0.39},{"x":198,"y":0.37},{"x":199,"y":0.13},{"x":200,"y":0.4},{"x":201,"y":0.25},{"x":202,"y":0.39},{"x":203,"y":0.52},{"x":204,"y":0.26},{"x":205,"y":1.08},{"x":206,"y":0.86},{"x":207,"y":1.24},{"x":208,"y":0.25},{"x":209,"y":0.37},{"x":210,"y":0.45},{"x":211,"y":0.28},{"x":212,"y":0.24},{"x":213,"y":0.45},{"x":214,"y":0.23},{"x":215,"y":0.23},{"x":216,"y":0.43},{"x":217,"y":0.32},{"x":218,"y":0.31},{"x":219,"y":0.18},{"x":220,"y":0.43},{"x":221,"y":0.22},{"x":222,"y":0.47000000000000003},{"x":223,"y":0.2},{"x":224,"y":0.13},{"x":225,"y":0.06},{"x":226,"y":0.14},{"x":227,"y":0.28},{"x":228,"y":0.2},{"x":229,"y":0.19},{"x":230,"y":0.2},{"x":231,"y":0.16},{"x":232,"y":0.19},{"x":233,"y":0.27},{"x":234,"y":0.15},{"x":235,"y":0.24},{"x":236,"y":0.13},{"x":237,"y":0.2},{"x":238,"y":0.11},{"x":239,"y":0.36},{"x":240,"y":0.21},{"x":241,"y":0.59},{"x":242,"y":0.36},{"x":243,"y":0.36},{"x":244,"y":0.3},{"x":245,"y":0.17},{"x":246,"y":0.32},{"x":247,"y":0.66},{"x":248,"y":0.41000000000000003},{"x":249,"y":0.35000000000000003},{"x":250,"y":0.31},{"x":251,"y":0.43},{"x":252,"y":0.37},{"x":253,"y":0.33},{"x":254,"y":0.22},{"x":255,"y":0.2},{"x":256,"y":0.18},{"x":257,"y":0.19},{"x":258,"y":0.21},{"x":259,"y":0.39},{"x":260,"y":0.44},{"x":261,"y":0.37},{"x":262,"y":0.6900000000000001},{"x":263,"y":2.04},{"x":264,"y":1.44},{"x":265,"y":1.04},{"x":266,"y":0.78},{"x":267,"y":0.55},{"x":268,"y":0.8300000000000001},{"x":269,"y":0.66},{"x":270,"y":0.6900000000000001},{"x":271,"y":0.47000000000000003},{"x":272,"y":0.25},{"x":273,"y":0.46},{"x":274,"y":1.01},{"x":275,"y":1.74},{"x":276,"y":0.88},{"x":277,"y":0.74},{"x":278,"y":1.1},{"x":279,"y":0.64},{"x":280,"y":0.41000000000000003},{"x":281,"y":0.51},{"x":282,"y":0.42},{"x":283,"y":0.58},{"x":284,"y":0.63},{"x":285,"y":0.37},{"x":286,"y":0.36},{"x":287,"y":0.35000000000000003},{"x":288,"y":0.61},{"x":289,"y":0.5},{"x":290,"y":0.45},{"x":291,"y":0.39},{"x":292,"y":0.34},{"x":293,"y":0.89},{"x":294,"y":0.53},{"x":295,"y":0.43},{"x":296,"y":0.59},{"x":297,"y":0.41000000000000003},{"x":298,"y":0.67},{"x":299,"y":0.66},{"x":300,"y":0.6},{"x":301,"y":0.55},{"x":302,"y":0.41000000000000003},{"x":303,"y":0.39},{"x":304,"y":0.35000000000000003},{"x":305,"y":0.36},{"x":306,"y":0.61},{"x":307,"y":0.3},{"x":308,"y":0.39},{"x":309,"y":0.43},{"x":310,"y":0.3},{"x":311,"y":0.4},{"x":312,"y":0.34},{"x":313,"y":0.32},{"x":314,"y":0.48},{"x":315,"y":0.45},{"x":316,"y":0.3},{"x":317,"y":0.32},{"x":318,"y":0.41000000000000003},{"x":319,"y":0.43},{"x":320,"y":0.45},{"x":321,"y":0.32},{"x":322,"y":0.38},{"x":323,"y":0.4},{"x":324,"y":0.4},{"x":325,"y":0.52},{"x":326,"y":0.64},{"x":327,"y":0.53},{"x":328,"y":0.31},{"x":329,"y":0.61},{"x":330,"y":0.54},{"x":331,"y":0.51},{"x":332,"y":0.79},{"x":333,"y":1.01},{"x":334,"y":0.55},{"x":335,"y":0.65},{"x":336,"y":0.43},{"x":337,"y":0.86},{"x":338,"y":0.68},{"x":339,"y":0.45},{"x":340,"y":0.49},{"x":341,"y":0.58},{"x":342,"y":0.42},{"x":343,"y":0.37},{"x":344,"y":0.73},{"x":345,"y":0.21},{"x":346,"y":0.47000000000000003},{"x":347,"y":0.31},{"x":348,"y":0.44},{"x":349,"y":0.22},{"x":350,"y":0.25},{"x":351,"y":0.21},{"x":352,"y":0.39},{"x":353,"y":0.54},{"x":354,"y":0.71},{"x":355,"y":0.68},{"x":356,"y":0.6},{"x":357,"y":0.66},{"x":358,"y":0.52},{"x":359,"y":0.48},{"x":360,"y":0.39},{"x":361,"y":0.6},{"x":362,"y":0.43},{"x":363,"y":0.75},{"x":364,"y":0.35000000000000003},{"x":365,"y":0.4},{"x":366,"y":0.58},{"x":367,"y":0.36},{"x":368,"y":0.3},{"x":369,"y":0.64},{"x":370,"y":0.45},{"x":371,"y":0.52},{"x":372,"y":0.4},{"x":373,"y":0.55},{"x":374,"y":0.33},{"x":375,"y":0.35000000000000003},{"x":376,"y":1.05},{"x":377,"y":0.44},{"x":378,"y":0.61},{"x":379,"y":0.58},{"x":380,"y":0.68},{"x":381,"y":0.44},{"x":382,"y":0.49},{"x":383,"y":0.41000000000000003},{"x":384,"y":0.31},{"x":385,"y":0.38},{"x":386,"y":0.31},{"x":387,"y":0.32},{"x":388,"y":0.46},{"x":389,"y":0.29},{"x":390,"y":0.38},{"x":391,"y":0.19},{"x":392,"y":0.36},{"x":393,"y":0.59},{"x":394,"y":0.61},{"x":395,"y":0.5},{"x":396,"y":0.35000000000000003},{"x":397,"y":0.68},{"x":398,"y":0.59},{"x":399,"y":0.27},{"x":400,"y":0.5},{"x":401,"y":0.29},{"x":402,"y":0.38},{"x":403,"y":0.23},{"x":404,"y":0.21},{"x":405,"y":0.41000000000000003},{"x":406,"y":0.53},{"x":407,"y":0.56},{"x":408,"y":0.71},{"x":409,"y":0.78},{"x":410,"y":0.65},{"x":411,"y":0.72},{"x":412,"y":0.8200000000000001},{"x":413,"y":1.6300000000000001},{"x":414,"y":0.72},{"x":415,"y":1.34},{"x":416,"y":0.79},{"x":417,"y":0.5},{"x":418,"y":0.58},{"x":419,"y":0.54},{"x":420,"y":0.21},{"x":421,"y":0.34},{"x":422,"y":0.31},{"x":423,"y":0.48},{"x":424,"y":0.21},{"x":425,"y":0.35000000000000003},{"x":426,"y":0.41000000000000003},{"x":427,"y":0.5},{"x":428,"y":0.52},{"x":429,"y":0.68},{"x":430,"y":0.75},{"x":431,"y":0.44},{"x":432,"y":0.8200000000000001},{"x":433,"y":0.45},{"x":434,"y":0.5},{"x":435,"y":0.37},{"x":436,"y":0.51},{"x":437,"y":0.41000000000000003},{"x":438,"y":0.41000000000000003},{"x":439,"y":0.8300000000000001},{"x":440,"y":0.49},{"x":441,"y":0.35000000000000003},{"x":442,"y":0.84},{"x":443,"y":0.53},{"x":444,"y":0.29},{"x":445,"y":0.41000000000000003},{"x":446,"y":0.68},{"x":447,"y":0.33},{"x":448,"y":0.38},{"x":449,"y":0.27},{"x":450,"y":0.36},{"x":451,"y":0.15},{"x":452,"y":0.18},{"x":453,"y":0.32},{"x":454,"y":0.31},{"x":455,"y":0.37},{"x":456,"y":0.25},{"x":457,"y":0.36},{"x":458,"y":0.27},{"x":459,"y":0.39},{"x":460,"y":0.22},{"x":461,"y":0.32},{"x":462,"y":0.51},{"x":463,"y":0.35000000000000003},{"x":464,"y":0.52},{"x":465,"y":0.39},{"x":466,"y":0.19},{"x":467,"y":0.24},{"x":468,"y":0.37},{"x":469,"y":0.36},{"x":470,"y":0.62},{"x":471,"y":0.49},{"x":472,"y":0.5},{"x":473,"y":0.33},{"x":474,"y":0.26},{"x":475,"y":0.55},{"x":476,"y":0.36},{"x":477,"y":0.47000000000000003},{"x":478,"y":0.29},{"x":479,"y":0.35000000000000003},{"x":480,"y":0.44},{"x":481,"y":0.25},{"x":482,"y":0.43},{"x":483,"y":0.64},{"x":484,"y":0.22},{"x":485,"y":0.37},{"x":486,"y":0.29},{"x":487,"y":0.16},{"x":488,"y":0.42},{"x":489,"y":0.16},{"x":490,"y":0.09},{"x":491,"y":0.15},{"x":492,"y":0.23},{"x":493,"y":0.4},{"x":494,"y":0.23},{"x":495,"y":0.39},{"x":496,"y":0.19},{"x":497,"y":0.24},{"x":498,"y":0.04},{"x":499,"y":0.15},{"x":500,"y":0.22},{"x":501,"y":0.39},{"x":502,"y":0.17},{"x":503,"y":0.53},{"x":504,"y":0.25},{"x":505,"y":0.56},{"x":506,"y":0.34},{"x":507,"y":0.31},{"x":508,"y":0.23},{"x":509,"y":0.3},{"x":510,"y":0.37},{"x":511,"y":0.3}]}],"marks":[{"type":"line","from":{"data":"02e63b14-7615-46c2-955f-cae419b9b3c7"},"properties":{"enter":{"x":{"scale":"x","field":"data.x"},"y":{"scale":"y","field":"data.y"},"stroke":{"value":"#FF29D2"},"strokeWidth":{"value":2},"strokeOpacity":{"value":1}}}}],"scales":[{"name":"x","type":"linear","range":"width","zero":false,"domain":{"data":"02e63b14-7615-46c2-955f-cae419b9b3c7","field":"data.x"}},{"name":"y","type":"linear","range":"height","nice":true,"zero":false,"domain":{"data":"02e63b14-7615-46c2-955f-cae419b9b3c7","field":"data.y"}}],"axes":[{"type":"x","scale":"x"},{"type":"y","scale":"y"}]},"value":"#gorilla_repl.vega.VegaView{:content {:width 600, :height 100.0, :padding {:top 10, :left 55, :bottom 40, :right 10}, :data [{:name \"02e63b14-7615-46c2-955f-cae419b9b3c7\", :values ({:x 0, :y 0.32} {:x 1, :y 0.86} {:x 2, :y 0.54} {:x 3, :y 0.37} {:x 4, :y 0.34} {:x 5, :y 0.39} {:x 6, :y 0.29} {:x 7, :y 0.23} {:x 8, :y 0.38} {:x 9, :y 0.36} {:x 10, :y 0.37} {:x 11, :y 0.28} {:x 12, :y 0.6} {:x 13, :y 0.33} {:x 14, :y 0.44} {:x 15, :y 0.59} {:x 16, :y 0.32} {:x 17, :y 0.12} {:x 18, :y 0.3} {:x 19, :y 0.16} {:x 20, :y 0.18} {:x 21, :y 0.15} {:x 22, :y 0.25} {:x 23, :y 0.28} {:x 24, :y 0.39} {:x 25, :y 0.25} {:x 26, :y 0.32} {:x 27, :y 0.42} {:x 28, :y 0.6} {:x 29, :y 0.46} {:x 30, :y 0.5700000000000001} {:x 31, :y 0.5} {:x 32, :y 0.32} {:x 33, :y 0.29} {:x 34, :y 0.19} {:x 35, :y 0.4} {:x 36, :y 0.43} {:x 37, :y 0.32} {:x 38, :y 0.22} {:x 39, :y 0.34} {:x 40, :y 0.13} {:x 41, :y 0.37} {:x 42, :y 0.35000000000000003} {:x 43, :y 0.37} {:x 44, :y 0.33} {:x 45, :y 0.41000000000000003} {:x 46, :y 0.43} {:x 47, :y 0.28} {:x 48, :y 0.18} {:x 49, :y 0.2} {:x 50, :y 0.33} {:x 51, :y 0.31} {:x 52, :y 0.67} {:x 53, :y 0.78} {:x 54, :y 0.85} {:x 55, :y 0.34} {:x 56, :y 0.55} {:x 57, :y 0.85} {:x 58, :y 0.89} {:x 59, :y 0.54} {:x 60, :y 0.35000000000000003} {:x 61, :y 0.77} {:x 62, :y 0.62} {:x 63, :y 0.4} {:x 64, :y 0.5700000000000001} {:x 65, :y 0.48} {:x 66, :y 0.5} {:x 67, :y 0.65} {:x 68, :y 0.72} {:x 69, :y 0.58} {:x 70, :y 0.66} {:x 71, :y 1.03} {:x 72, :y 0.5} {:x 73, :y 0.51} {:x 74, :y 0.49} {:x 75, :y 0.87} {:x 76, :y 0.67} {:x 77, :y 0.7000000000000001} {:x 78, :y 0.44} {:x 79, :y 0.26} {:x 80, :y 0.34} {:x 81, :y 0.07} {:x 82, :y 0.22} {:x 83, :y 0.41000000000000003} {:x 84, :y 0.21} {:x 85, :y 0.11} {:x 86, :y 0.32} {:x 87, :y 0.13} {:x 88, :y 0.17} {:x 89, :y 0.31} {:x 90, :y 0.23} {:x 91, :y 0.16} {:x 92, :y 0.31} {:x 93, :y 0.34} {:x 94, :y 0.16} {:x 95, :y 0.17} {:x 96, :y 0.1} {:x 97, :y 0.14} {:x 98, :y 0.31} {:x 99, :y 0.43} {:x 100, :y 0.25} {:x 101, :y 0.34} {:x 102, :y 0.39} {:x 103, :y 0.25} {:x 104, :y 0.48} {:x 105, :y 0.36} {:x 106, :y 0.39} {:x 107, :y 0.37} {:x 108, :y 0.27} {:x 109, :y 0.46} {:x 110, :y 0.36} {:x 111, :y 0.49} {:x 112, :y 0.29} {:x 113, :y 0.5} {:x 114, :y 0.42} {:x 115, :y 0.46} {:x 116, :y 0.41000000000000003} {:x 117, :y 0.25} {:x 118, :y 0.08} {:x 119, :y 0.25} {:x 120, :y 0.01} {:x 121, :y 0.21} {:x 122, :y 0.19} {:x 123, :y 0.32} {:x 124, :y 0.07} {:x 125, :y 0.31} {:x 126, :y 0.41000000000000003} {:x 127, :y 0.21} {:x 128, :y 0.06} {:x 129, :y 0.16} {:x 130, :y 0.34} {:x 131, :y 0.28} {:x 132, :y 0.3} {:x 133, :y 0.14} {:x 134, :y 0.32} {:x 135, :y 0.22} {:x 136, :y 0.24} {:x 137, :y 0.17} {:x 138, :y 0.25} {:x 139, :y 0.31} {:x 140, :y 0.37} {:x 141, :y 0.28} {:x 142, :y 0.27} {:x 143, :y 0.27} {:x 144, :y 0.27} {:x 145, :y 0.34} {:x 146, :y 0.28} {:x 147, :y 0.52} {:x 148, :y 0.29} {:x 149, :y 0.2} {:x 150, :y 0.25} {:x 151, :y 0.09} {:x 152, :y 0.31} {:x 153, :y 0.16} {:x 154, :y 0.3} {:x 155, :y 0.18} {:x 156, :y 0.16} {:x 157, :y 0.1} {:x 158, :y 0.17} {:x 159, :y 0.31} {:x 160, :y 0.4} {:x 161, :y 0.29} {:x 162, :y 0.31} {:x 163, :y 0.29} {:x 164, :y 0.32} {:x 165, :y 0.28} {:x 166, :y 0.1} {:x 167, :y 0.14} {:x 168, :y 0.25} {:x 169, :y 0.22} {:x 170, :y 0.13} {:x 171, :y 0.22} {:x 172, :y 0.26} {:x 173, :y 0.19} {:x 174, :y 0.11} {:x 175, :y 0.28} {:x 176, :y 0.05} {:x 177, :y 0.23} {:x 178, :y 0.23} {:x 179, :y 0.29} {:x 180, :y 0.29} {:x 181, :y 0.13} {:x 182, :y 0.19} {:x 183, :y 0.19} {:x 184, :y 0.66} {:x 185, :y 0.41000000000000003} {:x 186, :y 0.24} {:x 187, :y 0.17} {:x 188, :y 0.17} {:x 189, :y 0.32} {:x 190, :y 0.2} {:x 191, :y 0.18} {:x 192, :y 0.31} {:x 193, :y 0.19} {:x 194, :y 0.15} {:x 195, :y 0.11} {:x 196, :y 0.15} {:x 197, :y 0.39} {:x 198, :y 0.37} {:x 199, :y 0.13} {:x 200, :y 0.4} {:x 201, :y 0.25} {:x 202, :y 0.39} {:x 203, :y 0.52} {:x 204, :y 0.26} {:x 205, :y 1.08} {:x 206, :y 0.86} {:x 207, :y 1.24} {:x 208, :y 0.25} {:x 209, :y 0.37} {:x 210, :y 0.45} {:x 211, :y 0.28} {:x 212, :y 0.24} {:x 213, :y 0.45} {:x 214, :y 0.23} {:x 215, :y 0.23} {:x 216, :y 0.43} {:x 217, :y 0.32} {:x 218, :y 0.31} {:x 219, :y 0.18} {:x 220, :y 0.43} {:x 221, :y 0.22} {:x 222, :y 0.47000000000000003} {:x 223, :y 0.2} {:x 224, :y 0.13} {:x 225, :y 0.06} {:x 226, :y 0.14} {:x 227, :y 0.28} {:x 228, :y 0.2} {:x 229, :y 0.19} {:x 230, :y 0.2} {:x 231, :y 0.16} {:x 232, :y 0.19} {:x 233, :y 0.27} {:x 234, :y 0.15} {:x 235, :y 0.24} {:x 236, :y 0.13} {:x 237, :y 0.2} {:x 238, :y 0.11} {:x 239, :y 0.36} {:x 240, :y 0.21} {:x 241, :y 0.59} {:x 242, :y 0.36} {:x 243, :y 0.36} {:x 244, :y 0.3} {:x 245, :y 0.17} {:x 246, :y 0.32} {:x 247, :y 0.66} {:x 248, :y 0.41000000000000003} {:x 249, :y 0.35000000000000003} {:x 250, :y 0.31} {:x 251, :y 0.43} {:x 252, :y 0.37} {:x 253, :y 0.33} {:x 254, :y 0.22} {:x 255, :y 0.2} {:x 256, :y 0.18} {:x 257, :y 0.19} {:x 258, :y 0.21} {:x 259, :y 0.39} {:x 260, :y 0.44} {:x 261, :y 0.37} {:x 262, :y 0.6900000000000001} {:x 263, :y 2.04} {:x 264, :y 1.44} {:x 265, :y 1.04} {:x 266, :y 0.78} {:x 267, :y 0.55} {:x 268, :y 0.8300000000000001} {:x 269, :y 0.66} {:x 270, :y 0.6900000000000001} {:x 271, :y 0.47000000000000003} {:x 272, :y 0.25} {:x 273, :y 0.46} {:x 274, :y 1.01} {:x 275, :y 1.74} {:x 276, :y 0.88} {:x 277, :y 0.74} {:x 278, :y 1.1} {:x 279, :y 0.64} {:x 280, :y 0.41000000000000003} {:x 281, :y 0.51} {:x 282, :y 0.42} {:x 283, :y 0.58} {:x 284, :y 0.63} {:x 285, :y 0.37} {:x 286, :y 0.36} {:x 287, :y 0.35000000000000003} {:x 288, :y 0.61} {:x 289, :y 0.5} {:x 290, :y 0.45} {:x 291, :y 0.39} {:x 292, :y 0.34} {:x 293, :y 0.89} {:x 294, :y 0.53} {:x 295, :y 0.43} {:x 296, :y 0.59} {:x 297, :y 0.41000000000000003} {:x 298, :y 0.67} {:x 299, :y 0.66} {:x 300, :y 0.6} {:x 301, :y 0.55} {:x 302, :y 0.41000000000000003} {:x 303, :y 0.39} {:x 304, :y 0.35000000000000003} {:x 305, :y 0.36} {:x 306, :y 0.61} {:x 307, :y 0.3} {:x 308, :y 0.39} {:x 309, :y 0.43} {:x 310, :y 0.3} {:x 311, :y 0.4} {:x 312, :y 0.34} {:x 313, :y 0.32} {:x 314, :y 0.48} {:x 315, :y 0.45} {:x 316, :y 0.3} {:x 317, :y 0.32} {:x 318, :y 0.41000000000000003} {:x 319, :y 0.43} {:x 320, :y 0.45} {:x 321, :y 0.32} {:x 322, :y 0.38} {:x 323, :y 0.4} {:x 324, :y 0.4} {:x 325, :y 0.52} {:x 326, :y 0.64} {:x 327, :y 0.53} {:x 328, :y 0.31} {:x 329, :y 0.61} {:x 330, :y 0.54} {:x 331, :y 0.51} {:x 332, :y 0.79} {:x 333, :y 1.01} {:x 334, :y 0.55} {:x 335, :y 0.65} {:x 336, :y 0.43} {:x 337, :y 0.86} {:x 338, :y 0.68} {:x 339, :y 0.45} {:x 340, :y 0.49} {:x 341, :y 0.58} {:x 342, :y 0.42} {:x 343, :y 0.37} {:x 344, :y 0.73} {:x 345, :y 0.21} {:x 346, :y 0.47000000000000003} {:x 347, :y 0.31} {:x 348, :y 0.44} {:x 349, :y 0.22} {:x 350, :y 0.25} {:x 351, :y 0.21} {:x 352, :y 0.39} {:x 353, :y 0.54} {:x 354, :y 0.71} {:x 355, :y 0.68} {:x 356, :y 0.6} {:x 357, :y 0.66} {:x 358, :y 0.52} {:x 359, :y 0.48} {:x 360, :y 0.39} {:x 361, :y 0.6} {:x 362, :y 0.43} {:x 363, :y 0.75} {:x 364, :y 0.35000000000000003} {:x 365, :y 0.4} {:x 366, :y 0.58} {:x 367, :y 0.36} {:x 368, :y 0.3} {:x 369, :y 0.64} {:x 370, :y 0.45} {:x 371, :y 0.52} {:x 372, :y 0.4} {:x 373, :y 0.55} {:x 374, :y 0.33} {:x 375, :y 0.35000000000000003} {:x 376, :y 1.05} {:x 377, :y 0.44} {:x 378, :y 0.61} {:x 379, :y 0.58} {:x 380, :y 0.68} {:x 381, :y 0.44} {:x 382, :y 0.49} {:x 383, :y 0.41000000000000003} {:x 384, :y 0.31} {:x 385, :y 0.38} {:x 386, :y 0.31} {:x 387, :y 0.32} {:x 388, :y 0.46} {:x 389, :y 0.29} {:x 390, :y 0.38} {:x 391, :y 0.19} {:x 392, :y 0.36} {:x 393, :y 0.59} {:x 394, :y 0.61} {:x 395, :y 0.5} {:x 396, :y 0.35000000000000003} {:x 397, :y 0.68} {:x 398, :y 0.59} {:x 399, :y 0.27} {:x 400, :y 0.5} {:x 401, :y 0.29} {:x 402, :y 0.38} {:x 403, :y 0.23} {:x 404, :y 0.21} {:x 405, :y 0.41000000000000003} {:x 406, :y 0.53} {:x 407, :y 0.56} {:x 408, :y 0.71} {:x 409, :y 0.78} {:x 410, :y 0.65} {:x 411, :y 0.72} {:x 412, :y 0.8200000000000001} {:x 413, :y 1.6300000000000001} {:x 414, :y 0.72} {:x 415, :y 1.34} {:x 416, :y 0.79} {:x 417, :y 0.5} {:x 418, :y 0.58} {:x 419, :y 0.54} {:x 420, :y 0.21} {:x 421, :y 0.34} {:x 422, :y 0.31} {:x 423, :y 0.48} {:x 424, :y 0.21} {:x 425, :y 0.35000000000000003} {:x 426, :y 0.41000000000000003} {:x 427, :y 0.5} {:x 428, :y 0.52} {:x 429, :y 0.68} {:x 430, :y 0.75} {:x 431, :y 0.44} {:x 432, :y 0.8200000000000001} {:x 433, :y 0.45} {:x 434, :y 0.5} {:x 435, :y 0.37} {:x 436, :y 0.51} {:x 437, :y 0.41000000000000003} {:x 438, :y 0.41000000000000003} {:x 439, :y 0.8300000000000001} {:x 440, :y 0.49} {:x 441, :y 0.35000000000000003} {:x 442, :y 0.84} {:x 443, :y 0.53} {:x 444, :y 0.29} {:x 445, :y 0.41000000000000003} {:x 446, :y 0.68} {:x 447, :y 0.33} {:x 448, :y 0.38} {:x 449, :y 0.27} {:x 450, :y 0.36} {:x 451, :y 0.15} {:x 452, :y 0.18} {:x 453, :y 0.32} {:x 454, :y 0.31} {:x 455, :y 0.37} {:x 456, :y 0.25} {:x 457, :y 0.36} {:x 458, :y 0.27} {:x 459, :y 0.39} {:x 460, :y 0.22} {:x 461, :y 0.32} {:x 462, :y 0.51} {:x 463, :y 0.35000000000000003} {:x 464, :y 0.52} {:x 465, :y 0.39} {:x 466, :y 0.19} {:x 467, :y 0.24} {:x 468, :y 0.37} {:x 469, :y 0.36} {:x 470, :y 0.62} {:x 471, :y 0.49} {:x 472, :y 0.5} {:x 473, :y 0.33} {:x 474, :y 0.26} {:x 475, :y 0.55} {:x 476, :y 0.36} {:x 477, :y 0.47000000000000003} {:x 478, :y 0.29} {:x 479, :y 0.35000000000000003} {:x 480, :y 0.44} {:x 481, :y 0.25} {:x 482, :y 0.43} {:x 483, :y 0.64} {:x 484, :y 0.22} {:x 485, :y 0.37} {:x 486, :y 0.29} {:x 487, :y 0.16} {:x 488, :y 0.42} {:x 489, :y 0.16} {:x 490, :y 0.09} {:x 491, :y 0.15} {:x 492, :y 0.23} {:x 493, :y 0.4} {:x 494, :y 0.23} {:x 495, :y 0.39} {:x 496, :y 0.19} {:x 497, :y 0.24} {:x 498, :y 0.04} {:x 499, :y 0.15} {:x 500, :y 0.22} {:x 501, :y 0.39} {:x 502, :y 0.17} {:x 503, :y 0.53} {:x 504, :y 0.25} {:x 505, :y 0.56} {:x 506, :y 0.34} {:x 507, :y 0.31} {:x 508, :y 0.23} {:x 509, :y 0.3} {:x 510, :y 0.37} {:x 511, :y 0.3})}], :marks [{:type \"line\", :from {:data \"02e63b14-7615-46c2-955f-cae419b9b3c7\"}, :properties {:enter {:x {:scale \"x\", :field \"data.x\"}, :y {:scale \"y\", :field \"data.y\"}, :stroke {:value \"#FF29D2\"}, :strokeWidth {:value 2}, :strokeOpacity {:value 1}}}}], :scales [{:name \"x\", :type \"linear\", :range \"width\", :zero false, :domain {:data \"02e63b14-7615-46c2-955f-cae419b9b3c7\", :field \"data.x\"}} {:name \"y\", :type \"linear\", :range \"height\", :nice true, :zero false, :domain {:data \"02e63b14-7615-46c2-955f-cae419b9b3c7\", :field \"data.y\"}}], :axes [{:type \"x\", :scale \"x\"} {:type \"y\", :scale \"y\"}]}}"}
+;; <=
+
+;; **
+;;; ### Interacting with `Pure Data`
+;; **
+
+;; **
+;;; #### Repeatedly monitor state of prices 
+;; **
+
+;; @@
+(get-current-prices :eur-gbp)
+;; @@
+;; =>
+;;; {"type":"list-like","open":"<span class='clj-vector'>[</span>","close":"<span class='clj-vector'>]</span>","separator":" ","items":[{"type":"list-like","open":"<span class='clj-map'>{</span>","close":"<span class='clj-map'>}</span>","separator":", ","items":[{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:instrument</span>","value":":instrument"},{"type":"html","content":"<span class='clj-string'>&quot;EUR_GBP&quot;</span>","value":"\"EUR_GBP\""}],"value":"[:instrument \"EUR_GBP\"]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:time</span>","value":":time"},{"type":"html","content":"<span class='clj-string'>&quot;2015-12-16T20:31:02.000110Z&quot;</span>","value":"\"2015-12-16T20:31:02.000110Z\""}],"value":"[:time \"2015-12-16T20:31:02.000110Z\"]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:bid</span>","value":":bid"},{"type":"html","content":"<span class='clj-double'>0.72711</span>","value":"0.72711"}],"value":"[:bid 0.72711]"},{"type":"list-like","open":"","close":"","separator":" ","items":[{"type":"html","content":"<span class='clj-keyword'>:ask</span>","value":":ask"},{"type":"html","content":"<span class='clj-double'>0.7274</span>","value":"0.7274"}],"value":"[:ask 0.7274]"}],"value":"{:instrument \"EUR_GBP\", :time \"2015-12-16T20:31:02.000110Z\", :bid 0.72711, :ask 0.7274}"}],"value":"[{:instrument \"EUR_GBP\", :time \"2015-12-16T20:31:02.000110Z\", :bid 0.72711, :ask 0.7274}]"}
+;; <=
+
+;; @@
+(defn monitor-prices 
+  [instrument]
+  (fn [] (let [prices (o/get-current-prices instrument)
+        bid (:bid (first prices))]
+    (println bid))))
+;; @@
+;; =>
+;;; {"type":"html","content":"<span class='clj-var'>#&#x27;pure-capital/monitor-prices</span>","value":"#'pure-capital/monitor-prices"}
+;; <=
+
+;; @@
+(require '[util.scheduler :refer :all])
+;; @@
+;; =>
+;;; {"type":"html","content":"<span class='clj-nil'>nil</span>","value":"nil"}
+;; <=
+
+;; @@
+(def monitor1 (every-nmsec 1000 (monitor-prices :eur-usd)))
+;; @@
+;; =>
+;;; {"type":"html","content":"<span class='clj-var'>#&#x27;pure-capital/monitor1</span>","value":"#'pure-capital/monitor1"}
+;; <=
+
+;; @@
+(shutdown monitor1)
+;; @@
+;; =>
+;;; {"type":"html","content":"<span class='clj-nil'>nil</span>","value":"nil"}
+;; <=
+
+;; **
+;;; ### [FUDI protocol](https://en.wikipedia.org/wiki/FUDI) 
+;;; 
+;;; from Wikipedia:
+;;; 
+;;;     FUDI is a packet oriented protocol.
+;;; 
+;;;     Each message consists of one or more atoms, separated by one or more whitespace characters, and it's terminated by a semicolon character.
+;;; 
+;;;     An atom is a sequence of one or more characters; whitespaces inside atoms can be escaped by the backslash (ascii 92) character (see Examples below).
+;;; 
+;;;     A whitespace is either a space (ascii 32), a tab (ascii 9) or a newline (ascii 10).
+;;; 
+;;;     A semicolon (ascii 59) is mandatory to terminate (and send) a message. A newline is just treated as whitespace and not needed for message termination.
+;;; 
+;;;     Fudi is also the Swiss German word for bottom.
+;;;     
+;;;     
+;;; 
+;;; 
+;; **
+
+;; @@
+(print "pd dsp 1;\r\npd dsp 0;\r\n")
+;; @@
+;; ->
+;;; pd dsp 1;
+;;; pd dsp 0;
+;;; 
+;; <-
+;; =>
+;;; {"type":"html","content":"<span class='clj-nil'>nil</span>","value":"nil"}
+;; <=
+
+;; @@
+(require '[clj-fudi.core :refer :all] :reload-all)
+(keys (ns-publics 'clj-fudi.core))
+
+;; @@
+;; =>
+;;; {"type":"html","content":"<span class='clj-unkown'>(send-udp send-tcp send-fudi)</span>","value":"(send-udp send-tcp send-fudi)"}
+;; <=
+
+;; @@
+(future (sh "pd" "./pd/hello_world.pd"))
+;; @@
+;; =>
+;;; {"type":"html","content":"<span class='clj-unkown'>#object[clojure.core$future_call$reify__6736 0x3f47c572 {:status :pending, :val nil}]</span>","value":"#object[clojure.core$future_call$reify__6736 0x3f47c572 {:status :pending, :val nil}]"}
+;; <=
+
+;; @@
+(send-udp {:raz  3} :localhost 3000)
+;; @@
+;; =>
+;;; {"type":"html","content":"<span class='clj-nil'>nil</span>","value":"nil"}
+;; <=
+
+;; **
+;;; ### Repeat at interval:
+;;; 
+;;; 1. Download history
+;;; 2. Compute stat
+;;; 3. Map candles into range 0-1
+;;; 4. Send it to _Pd_
+;; **
+
+;; **
+;;; First we define function
+;; **
+
+;; @@
+(defn make-callback
+  [instrument port]
+  (fn []
+    (let [candles (->mid-candles (retrieve-history instrument :m1 512))
+          stat (candles->stat candles)
+          candles (normalize-0-1-candles candles stat)
+          candles (normalize-volume candles)
+          volumes (vec (doall (map :volume candles)))]
+      ;;(send-udp (first candles) :localhost port)
+      (doseq [batch (partition-all 128 volumes)]
+      	(send-udp {:volumes batch} :localhost port))
+      nil)))
+
+(def callback (make-callback :eur-usd 3000))
+;; @@
+;; =>
+;;; {"type":"html","content":"<span class='clj-var'>#&#x27;pure-capital/callback</span>","value":"#'pure-capital/callback"}
+;; <=
+
+;; @@
+
+;; @@
+;; =>
+;;; {"type":"html","content":"<span class='clj-nil'>nil</span>","value":"nil"}
+;; <=
+
+;; @@
+(def monitor-eur-usd 
+  (every-nmsec 1000 #'callback))
+;; @@
+;; =>
+;;; {"type":"html","content":"<span class='clj-var'>#&#x27;pure-capital/monitor-eur-usd</span>","value":"#'pure-capital/monitor-eur-usd"}
+;; <=
+
+;; @@
+(shutdown monitor-eur-usd)
+;; @@
+;; =>
+;;; {"type":"html","content":"<span class='clj-nil'>nil</span>","value":"nil"}
+;; <=
+
+;; @@
+
+;; @@

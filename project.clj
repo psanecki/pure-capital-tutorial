@@ -1,4 +1,4 @@
-(defproject clj-fudi "0.1.0-SNAPSHOT"
+(defproject pure-capital-tutorial "0.1.0-SNAPSHOT"
   :description "FIXME: write description"
   :url "http://example.com/FIXME"
   :jvm-opts [
@@ -16,5 +16,6 @@
                  [cheshire "5.5.0"]
                  [clj-http-lite "0.3.0"]
                  ]
-
+  :profiles {:uberjar {:aot :all}}
+  :plugins [[lein-gorilla "0.3.6"]]
 )

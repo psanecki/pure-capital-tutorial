@@ -13,7 +13,8 @@
 
 
 
-(defn dict->fudi-str-seq [obj-msg]
+(defn- dict->fudi-str-seq
+  [obj-msg]
   (for [k (keys obj-msg)]
     (let [message (k obj-msg)
           message (if (coll? message)
@@ -31,31 +32,10 @@
                        (interpose " ")
 
                        (reduce str "list ")))
-                    ;; (if (number? (first message))
-                    ;;   (->>
-                    ;;    (interpose " " (map (comp str float) message))
-                    ;;    (reduce str "list "))
-                    ;;   (->>
-                    ;;    (interpose " "  message)
-                    ;;    (reduce str "list ")))
-                    ;; else
-                    (if (number? message)
+                   (if (number? message)
                       (str (float message))
                       message))]
-      (reduce str (name k) [" " message ";\n"]))
-    ;; (apply str (name k) " "
-    ;;      (let [message (k obj-msg)]
-    ;;        (if (coll? message)
-    ;;          (let [messages (k obj-msg)
-    ;;                messages (if (number? (first messages))
-    ;;                           (map float messages)
-    ;;                           (map str messages))]
-    ;;            (apply str "list"
-    ;;                   " "
-    ;;                   (reduce str (interpose " " messages))))
-    ;;          message))
-    ;;      ";\n")
-    ))
+      (reduce str (name k) [" " message ";\n"]))))
 
 
 
@@ -87,37 +67,16 @@
           out (.getOutputStream socket)
           dos (new DataOutputStream out)
           messages (dict->fudi-str-seq obj-msg)
-          ;;_ (prn messages)
           buffer (.getBytes (reduce str messages))
           ]
       (.write dos buffer 0 (alength buffer)))
     (catch Exception e (.printStackTrace e))))
 
 
-;; (defn check-tcp-connection [host port]
-;;   (try
-;;     (with-open [socket (new Socket host port)]
-;;       (.isConnected socket))
-;;     (catch Exception e (.printStackTrace e))))
-
-;; (comment
-;;   (defn check-tcp-response [host port]
-;;     (with-open [sock (Socket. host port)
-;;                 writer (io/writer sock)
-;;                 reader (io/reader sock)
-;;                 response (StringWriter.)]
-;;       (doto writer (.append "isConnected? bang;") (.flush))
-;;       (io/copy reader response)
-;;       (str response)))
-;;   (check-tcp-response "localhost" 3000))
-
-;; (check-tcp-connection "localhost" 3000)
-
-
-
-(defn send-fudi [message port]
+(defn send-fudi
+  [message port]
   (with-open [sock (new Socket "localhost" port)
               writer (io/writer sock)]
     (doto writer
-      (.append message)
+      (.append (str message "\r\n"))
       (.flush))))
