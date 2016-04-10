@@ -506,6 +506,7 @@
 ;;; ##### `[netreceive]` and `[array]` objects
 ;;; 
 ;;; ![volumes](http://raw.githubusercontent.com/psanecki/pure-capital-tutorial/master/img/volumes.png)
+;;; ![volumes](https://raw.githubusercontent.com/psanecki/pure-capital-tutorial/master/img/volumes.png)
 ;; **
 
 ;; @@
@@ -536,6 +537,13 @@
       	(send-udp {:volumes batch} :localhost port))
       nil)))
 
+(def callback (make-callback :eur-usd 3000))
+;; @@
+;; =>
+;;; {"type":"html","content":"<span class='clj-var'>#&#x27;pure-capital/callback</span>","value":"#'pure-capital/callback"}
+;; <=
+
+;; @@
 (def callback (make-callback :eur-usd 3000))
 ;; @@
 ;; =>
