@@ -1,0 +1,5 @@
+#N canvas 555 250 450 300 10;
+#N canvas 379 132 865 445 structures 0;
+#X obj 54 36 struct ohlc float open float high float low float close
+, f 56;
+#X restore 754 188 pd structures;
