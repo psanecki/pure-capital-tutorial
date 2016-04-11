@@ -547,7 +547,7 @@
 ;;; ![synthesis](https://raw.githubusercontent.com/psanecki/pure-capital-tutorial/master/img/synthesis.png)
 ;;; 
 ;;; 
-;;; And this is just a proof of concept
+;;; And this is the simplest possible substractive synthesis using fft 
 ;;; 
 ;;; 
 ;;; ![synthesis](https://raw.githubusercontent.com/psanecki/pure-capital-tutorial/master/img/fft.png)
@@ -593,6 +593,24 @@
 ;; =>
 ;;; {"type":"html","content":"<span class='clj-unkown'>#object[clojure.core$future_call$reify__6736 0x28ea4ee2 {:status :pending, :val nil}]</span>","value":"#object[clojure.core$future_call$reify__6736 0x28ea4ee2 {:status :pending, :val nil}]"}
 ;; <=
+
+;; **
+;;; 
+;;; ![synthesis](https://raw.githubusercontent.com/psanecki/pure-capital-tutorial/master/img/candle.png)
+;;; 
+;;; 
+;;; 
+;;; ![synthesis](https://raw.githubusercontent.com/psanecki/pure-capital-tutorial/master/img/candle-arr.png)
+;;; 
+;;; 
+;;; ![synthesis](https://raw.githubusercontent.com/psanecki/pure-capital-tutorial/master/img/adding-candle.png)
+;;; 
+;;; 
+;;; ![synthesis](https://raw.githubusercontent.com/psanecki/pure-capital-tutorial/master/img/getting-candle.png)
+;;; 
+;;; 
+;;; ![synthesis](https://raw.githubusercontent.com/psanecki/pure-capital-tutorial/master/img/pd-plot.png)
+;; **
 
 ;; @@
 
