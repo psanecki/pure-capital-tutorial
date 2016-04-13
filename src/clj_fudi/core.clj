@@ -11,7 +11,14 @@
             DataInputStream
             StringWriter]))
 
-
+(defn- a->str
+  [a]
+  (cond
+    (number? a) (str (float a))
+    (keyword? a) (name a)
+    (instance? java.lang.Boolean a) (if a "1" "0")
+    (string? a) a
+    :else ""))
 
 (defn- dict->fudi-str-seq
   [obj-msg]
@@ -19,22 +26,12 @@
     (let [message (k obj-msg)
           message (if (coll? message)
                     (let [message-str
-                          (map
-                           #(cond
-                              (number? %) (str (float %))
-                              (keyword? %) (name %)
-                              (instance? java.lang.Boolean %) (if % "1" "0")
-                              (string? %) %
-                              :else "")
-                           message)]
+                          (map a->str message)]
                       (->>
                        message-str
                        (interpose " ")
-
                        (reduce str "list ")))
-                   (if (number? message)
-                      (str (float message))
-                      message))]
+                   (a->str message))]
       (reduce str (name k) [" " message ";\n"]))))
 
 
