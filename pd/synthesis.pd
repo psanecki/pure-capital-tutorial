@@ -1,5 +1,5 @@
-#N canvas 225 219 378 287 10;
-#N canvas 421 231 565 503 fft~ 0;
+#N canvas 372 244 378 287 10;
+#N canvas 495 169 565 503 fft~ 0;
 #X obj 20 63 inlet~;
 #X obj 20 85 *~;
 #X obj 20 107 rfft~;
@@ -196,17 +196,17 @@
 #X connect 25 0 18 0;
 #X connect 26 0 25 0;
 #X coords 0 503 1 502 240 300 0;
-#X restore 34 52 pd fft~;
-#X obj 35 20 noise~;
+#X restore 34 61 pd fft~;
+#X obj 37 19 noise~;
 #X obj 35 140 dac~;
-#N canvas 370 146 450 576 control 0;
+#N canvas 370 156 450 576 control 0;
 #X obj 108 358 / 127;
 #X obj 108 380 * 100;
 #X obj 108 402 dbtorms;
 #X obj 89 452 *~;
 #X obj 108 424 line~ 0 100;
 #X obj 107 123 hsl 128 15 0 127 0 0 empty empty cosine_panner 8 8 0
-10 -262144 -1 -1 9300 1;
+10 -262144 -1 -1 0 1;
 #X obj 231 189 / 127;
 #X obj 231 238 line~ 0 100;
 #X obj 230 352 cos~;
@@ -263,7 +263,7 @@
 #X connect 26 0 10 0;
 #X connect 28 0 0 0;
 #X coords 0 -1 1 1 164 40 2 100 100;
-#X restore 35 85 pd control;
+#X restore 36 88 pd control;
 #X connect 0 0 3 0;
 #X connect 1 0 0 0;
 #X connect 3 0 2 0;
